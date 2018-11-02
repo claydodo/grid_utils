@@ -1,8 +1,8 @@
 # -*- coding:utf-8 -*-
 
-import six
 import numpy as np
 
+__all__ = ['smart_meshgrid']
 
 def smart_meshgrid(*xi):
     if not xi:

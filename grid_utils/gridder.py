@@ -75,23 +75,163 @@ class XYGridderBase(GridderBase):
 
 
 class XYProjGridder(XYGridderBase):
-    def __init__(self, proj_info, nx, ny, dx, dy, x_orig=0.0, y_orig=0.0):
-        self.proj_info = proj_info
-        if not proj_info:
-            self.proj = NullProj()
-        elif isinstance(proj_info, dict):
-            self.proj = Proj(**proj_info)
+    def __init__(self, proj=None, x=None, y=None, nx=None, ny=None, dx=None, dy=None, x_orig=0.0, y_orig=0.0, **kwargs):
+        self.proj = proj
+        self._reset_raw_xy()
+        if x is not None and y is not None:
+            self.set_xy(x, y)
+        else:
+            self._init_with_para(nx, ny, dx, dy, x_orig, y_orig)
+
+    @property
+    def proj(self):
+        return self._proj
+    @proj.setter
+    def proj(self, p):
+        if p is None:
+            self._proj = NullProj()
+        elif isinstance(p, (Proj, NullProj)):
+            self._proj = p
+        elif isinstance(p, dict):
+            self._proj = Proj(**p)
         else:  # Treat as proj_string
-            self.proj = Proj(str(proj_info))  # TODO: check PY3 compatibility.
+            self._proj = Proj(str(p))  # TODO: check PY3 compatibility.
 
-        self.nx = nx
-        self.ny = ny
-        self.dx = dx
-        self.dy = dy
-        self.x_orig = x_orig
-        self.y_orig = y_orig
+        self._reset_raw_xy()
+        if all([hasattr(self, attr) for attr in ('_nx', '_ny', '_dx', '_dy', '_x_orig', '_y_orig')]):
+            self._updateXY()
 
-        self.X, self.Y = self._createXY()
+    @property
+    def X(self):
+        return self._X
+    @X.setter
+    def X(self, x):
+        if self._raw_y is None:
+            raise ValueError("Cannot set x alone when no raw y presents.")
+
+        ndim_x = np.ndim(x)
+        if ndim_x == 1 and np.ndim(self._raw_y) == 1:
+            self.set_xy(x, self._raw_y)
+        elif ndim_x == 2 and np.shape(x) == np.shape(self.Y):
+            self.set_xy(x, self.Y)
+        else:
+            self._raise_invalid_shape(x, self.Y)
+
+    @property
+    def Y(self):
+        return self._Y
+    @Y.setter
+    def Y(self, y):
+        if self._raw_x is None:
+            raise ValueError("Cannot set y alone when no raw x presents.")
+
+        ndim_y = np.ndim(y)
+        if ndim_y == 1 and np.ndim(self._raw_x) == 1:
+            self.set_xy(self._raw_x, y)
+        elif ndim_y == 2 and np.shape(y) == np.shape(self.X):
+            self.set_xy(self.X, y)
+        else:
+            self._raise_invalid_shape(self.X, y)
+
+    @property
+    def x(self):
+        return self._raw_x if self._raw_x is not None else self._X
+
+    @property
+    def y(self):
+        return self._raw_y if self._raw_y is not None else self._Y
+
+    @property
+    def nx(self):
+        return self._nx
+    @nx.setter
+    def nx(self, value):
+        self._nx = value
+        self._reset_raw_xy()
+        self._updateXY()
+
+    @property
+    def ny(self):
+        return self._ny
+    @ny.setter
+    def ny(self, value):
+        self._ny = value
+        self._reset_raw_xy()
+        self._updateXY()
+
+    @property
+    def dx(self):
+        return self._dx
+    @dx.setter
+    def dx(self, value):
+        self._dx = value
+        self._reset_raw_xy()
+        self._updateXY()
+
+    @property
+    def dy(self):
+        return self._dy
+    @dy.setter
+    def dy(self, value):
+        self._dy = value
+        self._reset_raw_xy()
+        self._updateXY()
+
+    @property
+    def x_orig(self):
+        return self._x_orig
+    @x_orig.setter
+    def x_orig(self, value):
+        self._x_orig = value
+        self._reset_raw_xy()
+        self._updateXY()
+
+    @property
+    def y_orig(self):
+        return self._y_orig
+    @y_orig.setter
+    def y_orig(self, value):
+        self._y_orig = value
+        self._reset_raw_xy()
+        self._updateXY()
+
+    def _init_with_para(self, nx, ny, dx, dy, x_orig, y_orig):
+        self._nx = nx
+        self._ny = ny
+        self._dx = dx
+        self._dy = dy
+        self._x_orig = x_orig
+        self._y_orig = y_orig
+
+        self._updateXY()
+
+    @property
+    def has_null_proj(self):
+        return isinstance(self.proj, NullProj)
+
+    def set_xy(self, x, y):
+        ndim_x, ndim_y = np.ndim(x), np.ndim(y)
+        if ndim_x == 1 and ndim_y == 1:
+            self._nx, self._ny = len(x), len(y)
+        elif ndim_x == 2 and ndim_y == 2:
+            self._ny, self._nx = np.shape(x)
+        else:
+            self._raise_invalid_shape(x, y)
+
+        self._raw_x, self._raw_y = np.asarray(x), np.asarray(y)
+        self.calibrate(x, y)
+
+    def _raise_invalid_shape(self, x, y):
+        raise ValueError("Invalid x, y shape: {}, {}".format(np.shape(x), np.shape(y)))
+
+    def _reset_raw_xy(self):
+        self._raw_x, self._raw_y = None, None
+
+    def _updateXY(self):
+        jj, ii = np.mgrid[0:self.ny, 0:self.nx]
+        xx, yy = self.i2x(ii, jj)
+        self._X, self._Y = xx, yy
+        return xx, yy
 
     def i2x(self, i, j):
         px = i * self.dx + self.x_orig
@@ -121,27 +261,34 @@ class XYProjGridder(XYGridderBase):
         else:
             return i, j
 
-    def calibrate(self, x0, y0, x1=None, y1=None):
+    def calibrate(self, x, y, x1=None, y1=None):
+        ndim_x, ndim_y = np.ndim(x), np.ndim(y)
+        if ndim_x == 0 and ndim_y == 0:
+            x0, y0 = x, y
+        if ndim_x == 1 and ndim_y == 1:
+            x0, x1 = x[0], x[1]
+            y0, y1 = y[0], y[1]
+        elif ndim_x == 2 and ndim_y == 2:
+            x0, x1 = x[0, 0], x[1, 1]
+            y0, y1 = y[0, 0], y[1, 1]
+        else:
+            self._raise_invalid_shape(x, y)
+
         px0, py0 = self.proj(x0, y0)
 
-        self.x_orig = px0
-        self.y_orig = py0
+        self._x_orig = px0
+        self._y_orig = py0
 
         if x1 is not None and y1 is not None:
             px1, py1 = self.proj(x1, y1)
-            self.dx = px1 - px0
-            self.dy = py1 - py0
+            self._dx = px1 - px0
+            self._dy = py1 - py0
 
-        self.X, self.Y = self._createXY()
-
-    def _createXY(self):
-        jj, ii = np.mgrid[0:self.ny, 0:self.nx]
-        xx, yy = self.i2x(ii, jj)
-        return xx, yy
+        self._updateXY()
 
     def dump(self):
         return {
-            "proj_info": self.proj.srs,
+            "proj": self.proj.srs,
             "nx": self.nx, "ny": self.ny, "dx": self.dx, "dy": self.dy,
             "x_orig": self.x_orig, "y_orig": self.y_orig
         }

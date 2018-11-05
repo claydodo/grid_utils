@@ -3,6 +3,7 @@
 import six
 import numpy as np
 from pyproj import Proj
+import operator
 
 from .exceptions import *
 
@@ -46,7 +47,21 @@ class XYGridderBase(GridderBase):
     """
     Requires self.X & self.Y.
     """
-    def get_bounding_ij(self, x1, x2, y1, y2):
+    @property
+    def bbox(self):
+        return (np.min(self.X), np.min(self.Y), np.max(self.X), np.max(self.Y))
+
+    def get_bounding_ij(self, x1, y1, x2, y2, **kwargs):
+        bbox = self.bbox
+        if x1 is None:
+            x1 = bbox[0]
+        if y1 is None:
+            y1 = bbox[1]
+        if x2 is None:
+            x2 = bbox[2]
+        if y2 is None:
+            y2 = bbox[3]
+
         bad = ~((self.X >= x1) & (self.X <= x2) & (self.Y >= y1) & (self.Y <= y2))
         x_bad = np.alltrue(bad, axis=0)
         y_bad = np.alltrue(bad, axis=1)
@@ -54,7 +69,7 @@ class XYGridderBase(GridderBase):
         y_points = np.argwhere(np.diff(np.r_[True, y_bad, True])).reshape(-1, 2)
         i1, i2 = (-1, -1) if x_points.shape[0] == 0 else x_points[0]
         j1, j2 = (-1, -1) if y_points.shape[0] == 0 else y_points[0]
-        return i1, i2, j1, j2
+        return i1, j1, i2, j2
 
     def check_bound(self, i, j, int_index=True):
         start = -0.5
@@ -195,6 +210,10 @@ class XYProjGridder(XYGridderBase):
         self._reset_raw_xy()
         self._updateXY()
 
+    @property
+    def bbox(self):
+        return self._bbox
+
     def _init_with_para(self, nx, ny, dx, dy, x_orig, y_orig):
         self._nx = nx
         self._ny = ny
@@ -231,6 +250,9 @@ class XYProjGridder(XYGridderBase):
         jj, ii = np.mgrid[0:self.ny, 0:self.nx]
         xx, yy = self.i2x(ii, jj)
         self._X, self._Y = xx, yy
+
+        self._bbox = (np.min(self._X), np.min(self._Y), np.max(self._X), np.max(self._Y))
+
         return xx, yy
 
     def i2x(self, i, j):

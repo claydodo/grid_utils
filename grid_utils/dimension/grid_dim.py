@@ -6,15 +6,62 @@ import numpy as np
 
 from krux.types.check import *
 
-__all__ = ['GridDim']
+__all__ = [
+    'GridDim',
+    'GridDimParseSerializeMixin',
+    'GridDimLUTMixin',
+    'GridDimBase',
+]
 
 
-class GridDim(object):
-    _true_lut = None
-    _values = None
-
+class GridDimParseSerializeMixin(object):
+    """requires: name"""
     parser = None
     serializer = None
+
+    def parse(self, value):
+        if not self.parser:
+            return value
+
+        if callable(self.parser):
+            return self.parser(value)
+
+    def serialize(self, value):
+        if not self.serializer:
+            return u"{}".format(value)
+
+        if callable(self.serializer):
+            return self.serializer(value)
+        elif isinstance(self.serializer, six.string_types):
+            if re.match(r'.*{[^{}]*}.*', self.serializer):
+                return self.serializer.format(value)
+            elif '%' in self.serializer:
+                return self.serializer % value
+            else:
+                raise ValueError("Invalid serializer in dim {}: {}".format(self.name, self.serializer))
+
+
+class GridDimLUTMixin(object):
+    """Requires: serialize, values"""
+    _true_lut = None
+
+    @property
+    def _lut(self):
+        if self._true_lut is None:
+            return self._build_lut(self.values)
+        else:
+            return self._true_lut
+
+    def _build_lut(self, values):
+        return {self.serialize(v): i for i, v in enumerate(values)}
+
+
+class GridDimBase(object):
+    is_grid_dim = True
+
+
+class GridDim(GridDimParseSerializeMixin, GridDimLUTMixin, GridDimBase):
+    _values = None
 
     def __init__(self, name, values, **kwargs):
         self.name = name
@@ -53,16 +100,6 @@ class GridDim(object):
         else:
             raise NotImplementedError("Dim size for multi-dim should be implemented by user.")
 
-    @property
-    def _lut(self):
-        if self._true_lut is None:
-            return self._build_lut(self.values)
-        else:
-            return self._true_lut
-
-    def _build_lut(self, values):
-        return {self.serialize(v): i for i, v in enumerate(values)}
-
     def __getitem__(self, key):
         return self.get_index(key)
 
@@ -87,27 +124,6 @@ class GridDim(object):
                 return self._lut[self.serialize(key)]
             except KeyError as e:
                 raise KeyError(u"{}, valid values: {}".format(key, self.values))
-
-    def parse(self, value):
-        if not self.parser:
-            return value
-
-        if callable(self.parser):
-            return self.parser(value)
-
-    def serialize(self, value):
-        if not self.serializer:
-            return u"{}".format(value)
-
-        if callable(self.serializer):
-            return self.serializer(value)
-        elif isinstance(self.serializer, six.string_types):
-            if re.match(r'.*{[^{}]*}.*', self.serializer):
-                return self.serializer.format(value)
-            elif '%' in self.serializer:
-                return self.serializer % value
-            else:
-                raise ValueError("Invalid serializer in dim {}: {}".format(self.name, self.serializer))
 
     def __repr__(self):
         return "<{} {}>".format(self.__class__.__name__, self.name)

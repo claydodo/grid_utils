@@ -76,4 +76,4 @@ class SmartIndexer(object):
         return IndexedArray(array, indexer=self)
 
     def __repr__(self):
-        return "<{} {}>".format(self.__class__.__name__, self.dim_names)
+        return "<{} {} {}>".format(self.__class__.__name__, self.dim_names, self.shape)

@@ -1,21 +1,17 @@
 # -*- coding:utf-8 -*-
 
 import six
-import numpy as np
 from .grid_dim import *
+from .mixins import *
 from grid_utils.gridder import XYProjGridder
-from krux.types.check import is_integer
-
+from krux.types.check import is_integer, is_float
 
 __all__ = ['XYDim']
 
 
-class XYDim(GridDimParseSerializeMixin, GridDimBase, XYProjGridder):
-    ndim = 2
+class XYDim(GridDimParseSerializeMixin, GridDim, XYProjGridder):
     def __init__(self, name=('y', 'x'), x=None, y=None, proj=None, nx=None, ny=None, dx=None, dy=None, x_orig=None, y_orig=None, **kwargs):
         assert len(name) == 2
-        y_name = name[0]
-        x_name = name[1]
         self.name = name
 
         super(XYDim, self).__init__(proj=proj, x=x, y=y,
@@ -26,6 +22,10 @@ class XYDim(GridDimParseSerializeMixin, GridDimBase, XYProjGridder):
 
         for k, v in six.iteritems(kwargs):
             setattr(self, k, v)
+
+    @property
+    def ndim(self):
+        return 2
 
     @property
     def size(self):
@@ -39,12 +39,6 @@ class XYDim(GridDimParseSerializeMixin, GridDimBase, XYProjGridder):
     def values(self, new_vals):
         x, y = new_vals
         self.set_xy(x, y)
-
-    def __repr__(self):
-        return "<{} {}>".format(self.__class__.__name__, self.name)
-
-    def __getitem__(self, key):
-        return self.get_index(key)
 
     def get_index(self, key, **kwargs):
         if is_integer(key):
@@ -70,7 +64,10 @@ class XYDim(GridDimParseSerializeMixin, GridDimBase, XYProjGridder):
             x_normal = self._is_normal_index_or_slice(key[1])
             if y_normal and x_normal:
                 return key
-            elif not y_normal and not x_normal:
+            elif is_float(key[0]) and is_float(key[1]):
+                i, j = self.x2i(key[1], key[0])
+                return j, i
+            elif isinstance(key[0], slice) and isinstance(key[1], slice):
                 y1, j1_fixed = (None, True) if is_integer(key[0].start) else (key[0].start, False)
                 y2, j2_fixed = (None, True) if is_integer(key[0].stop) else (key[0].stop, False)
                 x1, i1_fixed = (None, True) if is_integer(key[1].start) else (key[1].start, False)
@@ -83,7 +80,7 @@ class XYDim(GridDimParseSerializeMixin, GridDimBase, XYProjGridder):
                 j2 = key[0].start if j2_fixed else j2
                 return slice(j1, j2, key[0].step), slice(i1, i2, key[1].step)
             else:
-                raise NotImplementedError('mixed x y index not supported yet')
+                raise NotImplementedError(u"Index type ({}, {}) not supported yet".format(type(key[0]), type(key[1])))
 
     def _is_normal_index_or_slice(self, i):
         if is_integer(i):
@@ -92,4 +89,3 @@ class XYDim(GridDimParseSerializeMixin, GridDimBase, XYProjGridder):
             return (i.start is None or is_integer(i.start)) and (i.stop is None or is_integer(i.stop))
 
         return False
-

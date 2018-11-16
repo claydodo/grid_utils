@@ -45,6 +45,13 @@ class XYTiler(object):
         ys = self._to_xy_1d(tile_j, np.arange(self.ny), self.y0, self.y_size, self.ny, j_offset)
         return xs, ys
 
+    def get_tile_bbox(self, tile_i, tile_j):
+        x1 = self.x0 + self.x_size * tile_i
+        y1 = self.y0 + self.y_size * tile_j
+        x2 = x1 + self.x_size
+        y2 = y1 + self.y_size
+        return (x1, y1, x2, y2)
+
     def get_covered_tiles(self, x1, y1, x2, y2, detail=False):
         tile_i1, tile_j1, i1, j1 = self.xy2tile(x1, y1)
         tile_i2, tile_j2, i2, j2 = self.xy2tile(x2, y2)

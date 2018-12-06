@@ -1,9 +1,10 @@
 # -*- coding:utf-8 -*-
 
 import numpy as np
+from scipy.sparse import csr_matrix
 
 
-__all__ = ['calc_bilinear_para']
+__all__ = ['calc_bilinear_para', 'GridTransformer', 'transform_grid']
 
 
 def calc_bilinear_para(float_i, float_j, nx=None, ny=None):
@@ -81,3 +82,56 @@ def calc_bilinear_para(float_i, float_j, nx=None, ny=None):
         weight_list = [1.0]
 
     return {"i": np.array(i_list), "j": np.array(j_list), "weight": np.array(weight_list)}
+
+
+class GridTransformer(object):
+    def __init__(self, grid1, grid2):
+        self.grid1 = grid1
+        self.grid2 = grid2
+        self.matrix = self.gen_matrix()
+
+    def gen_matrix(self):
+        I, J = self.grid1.x2i(self.grid2.X.flatten(), self.grid2.Y.flatten(), int_index=False)
+        I1 = np.floor(I).astype('i4')
+        I2 = I1 + 1
+        J1 = np.floor(J).astype('i4')
+        J2 = J1 + 1
+        X = I % 1.0
+        Y = J % 1.0
+
+        ROW_IND1 = ROW_IND2 = ROW_IND3 = ROW_IND4 = np.arange(self.grid2.nx*self.grid2.ny, dtype='i4')
+        WHERE_OUT = (I1 < 0) | (I2 >= self.grid1.nx) | (J1 < 0) | (J2 >= self.grid1.ny)
+
+        COL_IND1 = J1 * self.grid1.nx + I1
+        COL_IND2 = J1 * self.grid1.nx + I2
+        COL_IND3 = J2 * self.grid1.nx + I1
+        COL_IND4 = J2 * self.grid1.nx + I2
+        COL_IND1[WHERE_OUT] = 0
+        COL_IND2[WHERE_OUT] = 0
+        COL_IND3[WHERE_OUT] = 0
+        COL_IND4[WHERE_OUT] = 0
+
+        DATA1 = (1.0 - X) * (1.0 - Y)
+        DATA2 = X * (1.0 - Y)
+        DATA3 = (1.0 - X) * Y
+        DATA4 = X * Y
+        DATA1[WHERE_OUT] = np.nan
+        DATA2[WHERE_OUT] = np.nan
+        DATA3[WHERE_OUT] = np.nan
+        DATA4[WHERE_OUT] = np.nan
+
+        ROW_IND = np.concatenate((ROW_IND1, ROW_IND2, ROW_IND3, ROW_IND4))
+        COL_IND = np.concatenate((COL_IND1, COL_IND2, COL_IND3, COL_IND4))
+        DATA = np.concatenate((DATA1, DATA2, DATA3, DATA4))
+
+        matrix = csr_matrix((DATA, (ROW_IND, COL_IND)), shape=(len(I), self.grid1.nx*self.grid1.ny))
+        return matrix
+
+    def __call__(self, data):
+        data = np.asarray(data)
+        return self.matrix.dot(data.flatten()).reshape((self.grid2.ny, self.grid2.nx))
+
+
+def transform_grid(grid1, grid2, data):
+    transformer = GridTransformer(grid1, grid2)
+    return transformer(data)

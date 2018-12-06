@@ -8,7 +8,7 @@ import setuptools
 
 setuptools.setup(
     name="grid_utils",
-    version="0.0.13",
+    version="0.0.18",
     author="claydodo and his little friends (xiao huo ban)",
     author_email="claydodo@foxmail.com",
     description="Data grid related utils",

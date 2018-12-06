@@ -52,7 +52,7 @@ class XYTiler(object):
         y2 = y1 + self.y_size
         return (x1, y1, x2, y2)
 
-    def get_covered_tiles(self, x1, y1, x2, y2, detail=False):
+    def get_covered_tiles(self, x1, y1, x2, y2, padding=0, detail=False):
         tile_i1, tile_j1, i1, j1 = self.xy2tile(x1, y1)
         tile_i2, tile_j2, i2, j2 = self.xy2tile(x2, y2)
 
@@ -65,6 +65,22 @@ class XYTiler(object):
             if y2 < y2_ + (self.y_size / self.ny) / 10.0:
                 tile_j2 -= 1
                 j2 = self.ny - 1
+
+        # Add padding
+        i1 -= padding
+        i2 += padding
+        j1 -= padding
+        j2 += padding
+
+        tile_i1 += i1 // self.nx
+        tile_i2 += i2 // self.nx
+        tile_j1 += j1 // self.ny
+        tile_j2 += j2 // self.ny
+
+        i1 %= self.nx
+        i2 %= self.nx
+        j1 %= self.ny
+        j2 %= self.ny
 
         tile_list = []
         for tj in range(tile_j1, tile_j2 + 1):
@@ -82,7 +98,7 @@ class XYTiler(object):
             j_offset = 0
             for tj in range(tile_j1, tile_j2+1):
                 j_beg = j1 if tj == tile_j1 else 0
-                j_end = j2 + 1 if tj == tile_j2 else self.ny
+                j_end = j2 + 1 if (tj == tile_j2 and j2 < self.ny) else self.ny
                 j_size = j_end - j_beg
                 j_beg_dict[tj] = j_beg
                 j_end_dict[tj] = j_end
@@ -93,7 +109,7 @@ class XYTiler(object):
             i_offset = 0
             for ti in range(tile_i1, tile_i2+1):
                 i_beg = i1 if ti == tile_i1 else 0
-                i_end = i2 + 1 if ti == tile_i2 else self.nx
+                i_end = i2 + 1 if (ti == tile_i2 and i2 < self.nx) else self.nx
                 i_size = i_end - i_beg
                 i_beg_dict[ti] = i_beg
                 i_end_dict[ti] = i_end
@@ -123,8 +139,11 @@ class XYTiler(object):
             return tile_list
 
     def _to_tile_1d(self, x, orig, block_size, pixel_num):
-        tile_i = int(np.floor(x - orig) / block_size)
+        tile_i = int(np.floor((x - orig) / block_size))
         i = int(np.round(((x - orig) % block_size) / block_size * pixel_num))
+        if i == pixel_num:
+            tile_i += 1
+            i = 0
         return tile_i, i
 
     def _to_xy_1d(self, tile_i, i, orig, block_size, pixel_num, offset=0.5):

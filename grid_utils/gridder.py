@@ -149,12 +149,28 @@ class XYProjGridder(XYGridderBase):
             self._raise_invalid_shape(self.X, y)
 
     @property
+    def CX(self):
+        return self._CX
+
+    @property
+    def CY(self):
+        return self._CY
+
+    @property
     def x(self):
         return self._raw_x if self._raw_x is not None else self._X
 
     @property
     def y(self):
         return self._raw_y if self._raw_y is not None else self._Y
+
+    @property
+    def cx(self):
+        return self._raw_cx if self._raw_cx is not None else self._CX
+
+    @property
+    def cy(self):
+        return self._raw_cy if self._raw_cy is not None else self._CY
 
     @property
     def nx(self):
@@ -214,6 +230,11 @@ class XYProjGridder(XYGridderBase):
     def bbox(self):
         return self._bbox
 
+    @property
+    def cbox(self):
+        """corner box"""
+        return self._cbox
+
     def _init_with_para(self, nx, ny, dx, dy, x_orig, y_orig):
         self._nx = nx
         self._ny = ny
@@ -248,10 +269,25 @@ class XYProjGridder(XYGridderBase):
 
     def _updateXY(self):
         jj, ii = np.mgrid[0:self.ny, 0:self.nx]
+        cjj, cii = np.mgrid[-0.5:self.ny, -0.5:self.nx]
         xx, yy = self.i2x(ii, jj)
+        cxx, cyy = self.i2x(cii, cjj)
+
         self._X, self._Y = xx, yy
+        self._CX, self._CY = cxx, cyy
+
+        if self._raw_x is not None and self._raw_x.ndim == 1:
+            self._raw_cx = self._CX[0]
+        else:
+            self._raw_cx = None
+
+        if self._raw_y is not None and self._raw_y.ndim == 1:
+            self._raw_cy = self._CY[:, 0]
+        else:
+            self._raw_cy = None
 
         self._bbox = (np.min(self._X), np.min(self._Y), np.max(self._X), np.max(self._Y))
+        self._cbox = (np.min(self._CX), np.min(self._CY), np.max(self._CX), np.max(self._CY))
 
         return xx, yy
 

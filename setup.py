@@ -8,7 +8,7 @@ import setuptools
 
 setuptools.setup(
     name="grid_utils",
-    version="0.0.24",
+    version="0.0.29",
     author="claydodo and his little friends (xiao huo ban)",
     author_email="claydodo@foxmail.com",
     description="Data grid related utils",
@@ -21,8 +21,5 @@ setuptools.setup(
         "Programming Language :: Python :: 3 ",
         "Operating System :: OS Independent",
     ),
-    install_requires=[
-        "six",
-        "pyproj",
-    ],
+    install_requires=[],
 )

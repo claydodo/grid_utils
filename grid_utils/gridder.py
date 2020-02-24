@@ -352,6 +352,123 @@ class XYProjGridder(XYGridderBase):
         }
 
 
+class LonLatSurroundingGridder(XYGridderBase):
+    def __init__(self, lon0, lat0, rmin, rmax, nr, ntheta, theta0=0.0, r_earth=6371):
+        self.lon0 = lon0
+        self.lat0 = lat0
+        self.rmin = rmin
+        self.rmax = rmax
+        self.nr = nr
+        self.ntheta = ntheta
+        self.theta0 = theta0
+        self.r_earth = r_earth
+
+        self.dtheta = np.pi * 2 / self.ntheta
+        self.dr = (self.rmax - self.rmin) / (self.nr - 1)
+        self._updateXY()
+
+    def _updateXY(self):
+        r = np.linspace(self.rmin, self.rmax, self.nr)
+        theta = np.arange(self.ntheta) * self.dtheta + self.theta0
+
+        THETA, R = np.meshgrid(theta, r)
+        LON, LAT = self.r_theta_to_lon_lat(R, THETA)
+
+        self._X = LON
+        self._Y = LAT
+
+        return self._X, self._Y
+
+    def r_theta_to_lon_lat(self, r, theta):
+        r_ = r / self.r_earth
+        sin_r = np.sin(r_)
+        cos_r = np.cos(r_)
+        lat0_ = np.deg2rad(self.lat0)
+        lon0_ = np.deg2rad(self.lon0)
+        sin_lat0 = np.sin(lat0_)
+        cos_lat0 = np.cos(lat0_)
+
+        sin_lat = sin_lat0 * cos_r + cos_lat0 * sin_r * np.cos(theta)
+        lat_ = np.arcsin(sin_lat)
+        lon_ = lon0_ + np.arctan2(np.sin(theta) * sin_r * cos_lat0, cos_r - sin_lat0 * sin_lat)
+
+        lon = np.rad2deg(lon_)
+        lat = np.rad2deg(lat_)
+        return lon, lat
+
+    @property
+    def nx(self):
+        return self.ntheta
+
+    @property
+    def ny(self):
+        return self.nr
+
+    @property
+    def X(self):
+        return self._X
+
+    @property
+    def Y(self):
+        return self._Y
+
+    @property
+    def x(self):
+        return self._X
+
+    @property
+    def y(self):
+        return self._Y
+
+    def i2x(self, i, j):
+        theta = self.theta0 + i * self.dtheta
+        r = self.rmin + j * self.dr
+        lon, lat = self.r_theta_to_lon_lat(r, theta)
+        return lon, lat
+
+    def x2i(self, x, y, int_index=True, check_bound=None):
+        lon2, lat2 = np.deg2rad(x), np.deg2rad(y)
+        lon1, lat1 = np.deg2rad(self.lon0), np.deg2rad(self.lat0)
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+
+        sin_dlon = np.sin(dlon)
+        cos_dlon = np.cos(dlon)
+        sin_lat1 = np.sin(lat1)
+        cos_lat1 = np.cos(lat1)
+        sin_lat2 = np.sin(lat2)
+        cos_lat2 = np.cos(lat2)
+
+        a = cos_lat2 * sin_dlon
+        b = cos_lat1 * sin_lat2 - sin_lat1 * cos_lat2 * cos_dlon
+
+        theta = np.arctan2(a, b)
+
+        c = np.sin(dlat / 2) ** 2 + cos_lat1 * cos_lat2 * np.sin(dlon / 2) ** 2
+        d = 2 * np.arcsin(np.sqrt(c))
+
+        r = d * self.r_earth
+
+        i = (theta - self.theta0) / self.dtheta % self.ntheta
+        j = (r - self.rmin) / self.dr
+
+        if int_index:
+            i = np.round(i)
+            j = np.round(j)
+
+            if np.isscalar(i):
+                i = int(i)
+                j = int(j)
+            else:
+                i = i.astype('i')
+                j = j.astype('i')
+
+        if check_bound:
+            return self.check_bound(i, j, int_index=int_index)
+        else:
+            return i, j
+
+
 class XYIrregularGridder(XYGridderBase):
     # TODO: use kdtree.
     def __init__(self, X, Y):
